@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for
 from models import db, CVE, CPE
 from services import nvd_service
-from sqlalchemy import inspect, desc, asc
+from sqlalchemy import inspect, desc, asc, and_, extract
 from datetime import datetime, timedelta
 
 bp = Blueprint('main', __name__)
@@ -12,8 +12,36 @@ def index():
     sort_by = request.args.get('sort_by', 'published_date')
     order = request.args.get('order', 'desc')
     
+    # Get filter parameters
+    cve_id_filter = request.args.get('cve_id', '')
+    year_filter = request.args.get('year', '')
+    cvss_score_filter = request.args.get('cvss_score', '')
+    last_modified_days = request.args.get('last_modified_days', '')
+    
     # Base query
     query = CVE.query
+    
+    # Apply filters
+    if cve_id_filter:
+        query = query.filter(CVE.cve_id.ilike(f'%{cve_id_filter}%'))
+    
+    if year_filter:
+        query = query.filter(extract('year', CVE.published_date) == int(year_filter))
+    
+    if cvss_score_filter:
+        try:
+            score = float(cvss_score_filter)
+            query = query.filter(CVE.base_score == score)
+        except ValueError:
+            pass
+    
+    if last_modified_days:
+        try:
+            days = int(last_modified_days)
+            cutoff_date = datetime.utcnow() - timedelta(days=days)
+            query = query.filter(CVE.last_modified >= cutoff_date)
+        except ValueError:
+            pass
     
     # Apply sorting
     if order == 'desc':
@@ -33,7 +61,11 @@ def index():
                          pagination=pagination,
                          sort_by=sort_by,
                          order=order,
-                         sync_status=sync_status)
+                         sync_status=sync_status,
+                         cve_id_filter=cve_id_filter,
+                         year_filter=year_filter,
+                         cvss_score_filter=cvss_score_filter,
+                         last_modified_days=last_modified_days)
 
 @bp.route('/cve/<string:cve_id>')
 def cve_details(cve_id):
