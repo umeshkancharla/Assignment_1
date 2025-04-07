@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Home</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ cve.cve_id }}</li>
+        </ol>
+    </nav>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h2 class="mb-0">{{ cve.cve_id }}</h2>
+            <span class="badge bg-{{ 'primary' if cve.vuln_status == 'Analyzed' else 'warning' if cve.vuln_status == 'Modified' else 'secondary' }}">
+                {{ cve.vuln_status }}
+            </span>
+        </div>
+        <div class="card-body">
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <h5>Basic Information</h5>
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Source:</th>
+                            <td>{{ cve.source_identifier }}</td>
+                        </tr>
+                        <tr>
+                            <th>Published:</th>
+                            <td>{{ cve.published_date.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+                        </tr>
+                        <tr>
+                            <th>Last Modified:</th>
+                            <td>{{ cve.last_modified.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h5>CVSS Metrics</h5>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="me-2">Base Score:</div>
+                        <div class="progress flex-grow-1" style="height: 20px;">
+                            <div class="progress-bar bg-{{ 'danger' if cve.base_score >= 7.0 else 'warning' if cve.base_score >= 4.0 else 'success' }}"
+                                 role="progressbar"
+                                 style="width: {{ (cve.base_score or 0) * 10 }}%"
+                                 aria-valuenow="{{ cve.base_score or 0 }}"
+                                 aria-valuemin="0"
+                                 aria-valuemax="10">
+                                {{ "%.1f"|format(cve.base_score) if cve.base_score else 'N/A' }}
+                            </div>
+                        </div>
+                    </div>
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Vector String:</th>
+                            <td><code>{{ cve.vector_string or 'N/A' }}</code></td>
+                        </tr>
+                        <tr>
+                            <th>Base Severity:</th>
+                            <td>{{ cve.base_severity or 'N/A' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Exploitability Score:</th>
+                            <td>{{ "%.1f"|format(cve.exploitability_score) if cve.exploitability_score else 'N/A' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Impact Score:</th>
+                            <td>{{ "%.1f"|format(cve.impact_score) if cve.impact_score else 'N/A' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <h5>Description</h5>
+            <div class="card mb-4">
+                <div class="card-body">
+                    {{ cve.description or 'No description available.' }}
+                </div>
+            </div>
+
+            <h5>Attack Vector Analysis</h5>
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Access Vector:</th>
+                            <td>{{ cve.access_vector or 'N/A' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Access Complexity:</th>
+                            <td>{{ cve.access_complexity or 'N/A' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Authentication:</th>
+                            <td>{{ cve.authentication or 'N/A' }}</td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Confidentiality Impact:</th>
+                            <td>{{ cve.confidentiality_impact or 'N/A' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Integrity Impact:</th>
+                            <td>{{ cve.integrity_impact or 'N/A' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Availability Impact:</th>
+                            <td>{{ cve.availability_impact or 'N/A' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <h5>Affected Components (CPEs)</h5>
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>CPE Match String</th>
+                            <th>Match Criteria ID</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cpe in cpes %}
+                        <tr>
+                            <td><code>{{ cpe.criteria }}</code></td>
+                            <td>{{ cpe.match_criteria_id }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'danger' if cpe.vulnerable else 'success' }}">
+                                    {{ 'Vulnerable' if cpe.vulnerable else 'Not Vulnerable' }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3" class="text-center">No CPE data available</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

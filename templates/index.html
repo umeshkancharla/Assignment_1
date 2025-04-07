@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>CVE Database</h1>
+    
+    <!-- Search Form -->
+    <form action="{{ url_for('main.search') }}" method="get" class="mb-4">
+        <div class="input-group">
+            <input type="text" name="q" class="form-control" placeholder="Search CVEs...">
+            <button type="submit" class="btn btn-primary">Search</button>
+        </div>
+    </form>
+
+    <!-- Sync Button and Status -->
+    <div class="mb-4">
+        <button id="syncButton" class="btn btn-success">Sync CVEs</button>
+        <button id="stopSyncButton" class="btn btn-danger" style="display: none;">Stop Sync</button>
+        <div id="syncStatus" class="mt-2" style="display: none;">
+            <div class="d-flex align-items-center">
+                <div class="spinner-border spinner-border-sm me-2" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <div>
+                    <strong>Syncing CVEs...</strong>
+                    <div class="text-muted small">
+                        Progress: <span id="syncProgress">0</span> of <span id="syncTotal">0</span> CVEs
+                    </div>
+                </div>
+            </div>
+            <div class="progress mt-2" style="height: 5px;">
+                <div id="syncProgressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CVE Table -->
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>
+                        <a href="{{ url_for('main.index', sort_by='cve_id', order='asc' if sort_by == 'cve_id' and order == 'desc' else 'desc') }}">
+                            CVE ID
+                            {% if sort_by == 'cve_id' %}
+                                <i class="fas fa-sort-{{ 'down' if order == 'desc' else 'up' }}"></i>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th>Description</th>
+                    <th>
+                        <a href="{{ url_for('main.index', sort_by='published_date', order='asc' if sort_by == 'published_date' and order == 'desc' else 'desc') }}">
+                            Published
+                            {% if sort_by == 'published_date' %}
+                                <i class="fas fa-sort-{{ 'down' if order == 'desc' else 'up' }}"></i>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a href="{{ url_for('main.index', sort_by='base_score', order='asc' if sort_by == 'base_score' and order == 'desc' else 'desc') }}">
+                            Base Score
+                            {% if sort_by == 'base_score' %}
+                                <i class="fas fa-sort-{{ 'down' if order == 'desc' else 'up' }}"></i>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cve in cves %}
+                <tr>
+                    <td><a href="{{ url_for('main.cve_details', cve_id=cve.cve_id) }}">{{ cve.cve_id }}</a></td>
+                    <td>{{ cve.description[:200] + '...' if cve.description|length > 200 else cve.description }}</td>
+                    <td>{{ cve.published_date.strftime('%Y-%m-%d') }}</td>
+                    <td>
+                        <span class="badge bg-{{ 'danger' if cve.base_score >= 7.0 else 'warning' if cve.base_score >= 4.0 else 'success' }}">
+                            {{ "%.1f"|format(cve.base_score) if cve.base_score else 'N/A' }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge bg-{{ 'primary' if cve.vuln_status == 'Analyzed' else 'warning' if cve.vuln_status == 'Modified' else 'secondary' }}">
+                            {{ cve.vuln_status }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <nav aria-label="Page navigation">
+        <ul class="pagination justify-content-center">
+            {% if pagination.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('main.index', page=pagination.prev_num, sort_by=sort_by, order=order) }}">Previous</a>
+            </li>
+            {% endif %}
+            
+            {% for page_num in pagination.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                {% if page_num %}
+                    <li class="page-item {{ 'active' if page_num == pagination.page else '' }}">
+                        <a class="page-link" href="{{ url_for('main.index', page=page_num, sort_by=sort_by, order=order) }}">{{ page_num }}</a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if pagination.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('main.index', page=pagination.next_num, sort_by=sort_by, order=order) }}">Next</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+
+{% block scripts %}
+<script>
+let syncStatusInterval = null;
+
+function updateSyncStatus() {
+    fetch('/sync/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'running') {
+                const progress = data.processed_count;
+                const total = data.total_count || 0;
+                const percentage = total > 0 ? (progress / total * 100) : 0;
+                
+                document.getElementById('syncStatus').style.display = 'block';
+                document.getElementById('stopSyncButton').style.display = 'inline-block';
+                document.getElementById('syncProgress').textContent = progress;
+                document.getElementById('syncTotal').textContent = total;
+                document.getElementById('syncProgressBar').style.width = percentage + '%';
+                
+                // Keep polling
+                if (!syncStatusInterval) {
+                    syncStatusInterval = setInterval(updateSyncStatus, 2000);
+                }
+            } else if (data.status === 'stopping') {
+                document.getElementById('stopSyncButton').disabled = true;
+                document.getElementById('stopSyncButton').innerHTML = 'Stopping...';
+            } else if (data.status === 'stopped') {
+                clearInterval(syncStatusInterval);
+                syncStatusInterval = null;
+                document.getElementById('syncStatus').style.display = 'none';
+                document.getElementById('syncButton').disabled = false;
+                document.getElementById('syncButton').innerHTML = 'Sync CVEs';
+                document.getElementById('stopSyncButton').style.display = 'none';
+                document.getElementById('stopSyncButton').disabled = false;
+                document.getElementById('stopSyncButton').innerHTML = 'Stop Sync';
+                alert('Sync stopped by user.');
+                location.reload();
+            } else if (data.status === 'completed') {
+                clearInterval(syncStatusInterval);
+                syncStatusInterval = null;
+                document.getElementById('syncStatus').style.display = 'none';
+                document.getElementById('syncButton').disabled = false;
+                document.getElementById('syncButton').innerHTML = 'Sync CVEs';
+                document.getElementById('stopSyncButton').style.display = 'none';
+                document.getElementById('stopSyncButton').disabled = false;
+                document.getElementById('stopSyncButton').innerHTML = 'Stop Sync';
+                alert('Sync completed successfully!');
+                location.reload();
+            } else if (data.status === 'error') {
+                clearInterval(syncStatusInterval);
+                syncStatusInterval = null;
+                document.getElementById('syncStatus').style.display = 'none';
+                document.getElementById('syncButton').disabled = false;
+                document.getElementById('syncButton').innerHTML = 'Sync CVEs';
+                document.getElementById('stopSyncButton').style.display = 'none';
+                document.getElementById('stopSyncButton').disabled = false;
+                document.getElementById('stopSyncButton').innerHTML = 'Stop Sync';
+                alert('Error: ' + data.error);
+            } else if (data.status === 'not_running') {
+                clearInterval(syncStatusInterval);
+                syncStatusInterval = null;
+                document.getElementById('syncStatus').style.display = 'none';
+                document.getElementById('syncButton').disabled = false;
+                document.getElementById('syncButton').innerHTML = 'Sync CVEs';
+                document.getElementById('stopSyncButton').style.display = 'none';
+                document.getElementById('stopSyncButton').disabled = false;
+                document.getElementById('stopSyncButton').innerHTML = 'Stop Sync';
+            }
+        })
+        .catch(error => {
+            console.error('Error checking sync status:', error);
+        });
+}
+
+document.getElementById('syncButton').addEventListener('click', function() {
+    this.disabled = true;
+    
+    fetch('/sync')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'started') {
+                document.getElementById('syncStatus').style.display = 'block';
+                document.getElementById('stopSyncButton').style.display = 'inline-block';
+                updateSyncStatus();
+            } else if (data.status === 'already_running') {
+                document.getElementById('syncStatus').style.display = 'block';
+                document.getElementById('stopSyncButton').style.display = 'inline-block';
+                updateSyncStatus();
+            } else {
+                alert('Error: ' + data.message);
+                this.disabled = false;
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error);
+            this.disabled = false;
+        });
+});
+
+document.getElementById('stopSyncButton').addEventListener('click', function() {
+    if (confirm('Are you sure you want to stop the sync process?')) {
+        this.disabled = true;
+        this.innerHTML = 'Stopping...';
+        
+        fetch('/sync/stop')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'error') {
+                    alert('Error stopping sync: ' + data.message);
+                    this.disabled = false;
+                    this.innerHTML = 'Stop Sync';
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error);
+                this.disabled = false;
+                this.innerHTML = 'Stop Sync';
+            });
+    }
+});
+
+// Check if sync is already running when page loads
+{% if sync_status %}
+document.getElementById('syncStatus').style.display = 'block';
+document.getElementById('syncButton').disabled = true;
+document.getElementById('stopSyncButton').style.display = 'inline-block';
+updateSyncStatus();
+{% endif %}
+</script>
+{% endblock %}
+{% endblock %} 

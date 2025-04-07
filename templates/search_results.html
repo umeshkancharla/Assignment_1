@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Home</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Search Results</li>
+        </ol>
+    </nav>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="mb-0">Search Results for "{{ query }}"</h2>
+        </div>
+        <div class="card-body">
+            {% if cves %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>CVE ID</th>
+                            <th>Description</th>
+                            <th>Published</th>
+                            <th>Base Score</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cve in cves %}
+                        <tr>
+                            <td><a href="{{ url_for('main.cve_details', cve_id=cve.cve_id) }}">{{ cve.cve_id }}</a></td>
+                            <td>{{ cve.description[:200] + '...' if cve.description|length > 200 else cve.description }}</td>
+                            <td>{{ cve.published_date.strftime('%Y-%m-%d') }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'danger' if cve.base_score >= 7.0 else 'warning' if cve.base_score >= 4.0 else 'success' }}">
+                                    {{ "%.1f"|format(cve.base_score) if cve.base_score else 'N/A' }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ 'primary' if cve.vuln_status == 'Analyzed' else 'warning' if cve.vuln_status == 'Modified' else 'secondary' }}">
+                                    {{ cve.vuln_status }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <nav aria-label="Search results pages">
+                <ul class="pagination justify-content-center">
+                    {% if pagination.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('main.search', q=query, page=pagination.prev_num) }}">Previous</a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for page_num in pagination.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                        {% if page_num %}
+                            <li class="page-item {{ 'active' if page_num == pagination.page else '' }}">
+                                <a class="page-link" href="{{ url_for('main.search', q=query, page=page_num) }}">{{ page_num }}</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if pagination.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('main.search', q=query, page=pagination.next_num) }}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% else %}
+            <div class="alert alert-info">
+                No results found for "{{ query }}". Try different search terms or <a href="{{ url_for('main.index') }}">browse all CVEs</a>.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 
